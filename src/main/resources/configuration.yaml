@@ -1,0 +1,29 @@
+api:
+  name: "SalesDataIntegration"
+  version: "V1"
+  id: "17801830"
+  
+salesapi:
+  host: "192.168.15.10"
+  port: "8092"
+  basepath: "/salesms/v1"
+  connectiontimeout: "30000"
+  responsetimeout: "30000"
+  orderPath: "/orders"
+  
+salesdbapi:
+  host: "192.168.15.10"
+  port: "8092"
+  basepath: "/salesdbms/v1"
+  connectiontimeout: "30000"
+  responsetimeout: "30000"
+  orderItemsPath: "/orderItems"
+
+files:
+  basepath: "E:\\MULESOFT\\Files"
+  orders: "orders.csv"
+  orderItems: "order_items.csv"
+
+client:
+  id: "0696251c89834826b08ae65aa609d2f7"
+  secret: "5E6B9f7a911e48749Ae25260868341eF"

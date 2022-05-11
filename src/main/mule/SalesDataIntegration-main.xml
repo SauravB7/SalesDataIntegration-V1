@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<file:config name="File_Config" doc:name="File Config"
+		doc:id="0a37f165-5801-4f20-acd1-48565654bf95">
+		<file:connection workingDir="${files.basepath}" />
+	</file:config>
+
+	<http:request-config
+		name="SalesAPI_HTTP_Request_Configuration"
+		doc:name="HTTP Request configuration"
+		doc:id="246b1e85-a5b2-4a25-b19c-646645f75708"
+		basePath="${salesapi.basepath}"
+		responseTimeout="${salesapi.responsetimeout}">
+		<http:request-connection
+			host="${salesapi.host}" port="${salesapi.port}"
+			connectionIdleTimeout="${salesapi.connectiontimeout}" />
+	</http:request-config>
+
+	<http:request-config
+		name="SalesDBSysAPI_HTTP_Request_Configuration"
+		doc:name="HTTP Request configuration"
+		doc:id="246b1e85-a5b2-4a25-b19c-646645f75708"
+		basePath="${salesdbapi.basepath}"
+		responseTimeout="${salesdbapi.responsetimeout}">
+		<http:request-connection
+			host="${salesdbapi.host}" port="${salesdbapi.port}"
+			connectionIdleTimeout="${salesdbapi.connectiontimeout}" />
+	</http:request-config>
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="0964cefe-144a-4b93-bdee-0ca68e197a65"
+		file="configuration.yaml" />
+	<flow name="SalesDataIntegration-main"
+		doc:id="684909b6-2cec-44cf-bf2f-5533ee294b59">
+		<file:listener doc:name="On New or Updated File"
+			doc:id="27e75938-a7a6-4cb5-ac93-680768626230"
+			config-ref="File_Config" timeBetweenSizeCheck="30"
+			timeBetweenSizeCheckUnit="SECONDS">
+			<scheduling-strategy>
+				<fixed-frequency />
+			</scheduling-strategy>
+		</file:listener>
+		<file:list doc:name="List"
+			doc:id="84e09750-11f2-4e9e-bacb-739b47bb3d46"
+			config-ref="File_Config" directoryPath="E:\MULESOFT\Files" />
+		<foreach doc:name="For Each"
+			doc:id="158b19c0-40ea-442f-8d2c-10a06fd6d108">
+			<choice doc:name="Choice"
+				doc:id="700d5969-beae-46d3-a8a0-02e053af2e7d">
+				<when expression="#[not attributes.directory]">
+					<choice doc:name="Choice"
+						doc:id="8ab2eb3a-89f9-46c6-9450-7f0520d1f992">
+						<when
+							expression="#[attributes.path contains p('files.orders')]">
+							<ee:transform
+								doc:name="CSV to JSON Transformation - Orders"
+								doc:id="bd8427b3-4b5e-419a-b5ce-18d043a6d368">
+								<ee:message>
+									<ee:set-payload
+										resource="dataweaves/Orders/CSVtoJSONTransformation.dwl" />
+								</ee:message>
+							</ee:transform>
+							<batch:job jobName="Orders_FileProcess_BatchJob"
+								doc:id="e58d9a28-67b1-4817-b04f-100f5444c0bb"
+								maxFailedRecords="-1" blockSize="1000" maxConcurrency="10">
+								<batch:process-records>
+									<batch:step name="Batch_Step"
+										doc:id="4b555a91-e96c-4233-911c-b58d69671346"
+										acceptPolicy="ALL">
+										<ee:transform
+											doc:name="Order Request Transformation"
+											doc:id="66e9777b-1571-47f9-8e44-ebe1ecdfbbd3">
+											<ee:message>
+												<ee:set-payload
+													resource="dataweaves/Orders/RequestTransformation.dwl" />
+											</ee:message>
+										</ee:transform>
+										<batch:aggregator doc:name="Batch Aggregator"
+											doc:id="40939a85-c76d-47fd-9831-5077cf1aa01c" size="100"
+											preserveMimeTypes="true">
+											<ee:transform doc:name="Create Order Request"
+												doc:id="e8e8d826-cd82-4c5f-8683-a763e196eec0">
+												<ee:message>
+													<ee:set-payload
+														resource="dataweaves/Orders/CreateOrdersRequestTransformation.dwl" />
+												</ee:message>
+											</ee:transform>
+											<async doc:name="Async"
+												doc:id="3986816d-e0ca-4d2c-8751-20fa5b510a69">
+												<http:request method="POST"
+													doc:name="Insert Orders Request"
+													doc:id="73bdfbde-8a5d-456f-8d26-b413cc5a8edf"
+													config-ref="SalesAPI_HTTP_Request_Configuration"
+													path="${salesapi.orderPath}">
+													<http:headers><![CDATA[#[{
+	client_id: p('client.id'),
+	client_secret: p('client.secret')
+}]]]></http:headers>
+												</http:request>
+											</async>
+										</batch:aggregator>
+									</batch:step>
+								</batch:process-records>
+								<batch:on-complete>
+									<file:delete doc:name="Delete"
+										doc:id="025237e8-12c6-42db-a4b2-937d6766168a"
+										config-ref="File_Config" path="#[p('files.orders')]" />
+								</batch:on-complete>
+							</batch:job>
+						</when>
+						<when
+							expression="#[attributes.path contains p('files.orderItems')]">
+							<ee:transform
+								doc:name="CSV to JSON Transformation - OrderItems"
+								doc:id="bd8427b3-4b5e-419a-b5ce-18d043a6d368">
+								<ee:message>
+									<ee:set-payload
+										resource="dataweaves/OrderItems/CSVtoJSONTransformation.dwl" />
+								</ee:message>
+							</ee:transform>
+							<batch:job jobName="OrderItems_FileProcess_BatchJob"
+								doc:id="e58d9a28-67b1-4817-b04f-100f5444c0bb"
+								maxFailedRecords="-1" blockSize="1000" maxConcurrency="10">
+								<batch:process-records>
+									<batch:step name="Batch_Step"
+										doc:id="4b555a91-e96c-4233-911c-b58d69671346"
+										acceptPolicy="ALL">
+										<ee:transform
+											doc:name="Order Items Request Transformation"
+											doc:id="66e9777b-1571-47f9-8e44-ebe1ecdfbbd3">
+											<ee:message>
+												<ee:set-payload
+													resource="dataweaves/OrderItems/RequestTransformation.dwl" />
+											</ee:message>
+										</ee:transform>
+										<batch:aggregator doc:name="Batch Aggregator"
+											doc:id="40939a85-c76d-47fd-9831-5077cf1aa01c" size="100"
+											preserveMimeTypes="true">
+											<ee:transform
+												doc:name="Create Order Items Request"
+												doc:id="e8e8d826-cd82-4c5f-8683-a763e196eec0">
+												<ee:message>
+													<ee:set-payload
+														resource="dataweaves/OrderItems/CreateOrderItemsRequestTransformation.dwl" />
+												</ee:message>
+											</ee:transform>
+											<async doc:name="Async"
+												doc:id="3986816d-e0ca-4d2c-8751-20fa5b510a69">
+												<http:request method="POST"
+													doc:name="Insert Order Items Request"
+													doc:id="73bdfbde-8a5d-456f-8d26-b413cc5a8edf"
+													config-ref="SalesDBSysAPI_HTTP_Request_Configuration"
+													path="${salesdbapi.orderItemsPath}">
+													<http:headers><![CDATA[#[{
+	client_id: p('client.id'),
+	client_secret: p('client.secret')
+}]]]></http:headers>
+												</http:request>
+											</async>
+										</batch:aggregator>
+									</batch:step>
+								</batch:process-records>
+								<batch:on-complete>
+									<file:delete doc:name="Delete"
+										doc:id="025237e8-12c6-42db-a4b2-937d6766168a"
+										config-ref="File_Config" path="#[p('files.orderItems')]" />
+								</batch:on-complete>
+							</batch:job>
+						</when>
+						<otherwise>
+							<logger level="DEBUG"
+								doc:name="Ignore files with different name"
+								doc:id="7c921504-f34a-4845-ac1a-eb57f099b85e"
+								message="Ignore files with different name" />
+						</otherwise>
+					</choice>
+				</when>
+				<otherwise>
+					<logger level="DEBUG" doc:name="Directory Found. Ignored."
+						doc:id="67c2d76a-d74c-4556-8ead-94878b51f0f9"
+						message="Directory Found. Ignored." />
+				</otherwise>
+			</choice>
+		</foreach>
+	</flow>
+</mule>
