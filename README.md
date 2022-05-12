@@ -1,7 +1,7 @@
 # SalesDataIntegration-V1
 
 ### Setting Up Listener for the Project
-Update ***src/main/resources/configuration.yaml*** with the Working directory or file path to listen.
+Update [***configuration.yaml***](./src/main/resources/configuration.yaml) with the Working directory or file path to listen.
 ```
 files:
   basepath: "E:\\MULESOFT\\Files"
