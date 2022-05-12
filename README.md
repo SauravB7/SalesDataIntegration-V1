@@ -37,6 +37,8 @@ mvn clean package
 
 ### File Structure for Orders and Order Items
 
+Sample data files are present in [Test Resources Folder](./src/test/resources)
+
 **Orders**
 ![image](https://user-images.githubusercontent.com/28842863/167984463-e04917c4-28ba-4fa2-b03c-b0d57d889100.png)
 
